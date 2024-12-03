@@ -6,6 +6,7 @@ header("Content-Type: application/json");
 
 $input = json_decode(file_get_contents("php://input"), true);
 $value = isset($input['value']) ? $input['value'] : null;
+$heap = isset($input['heap']) ? $input['heap'] : [];
 
 if ($value === null) {
     echo json_encode(['error' => 'Valor inválido ou ausente']);
@@ -25,26 +26,28 @@ try {
     ");
 
     $stmt->execute(['value' => $value]);
-} catch (PDOException $e) {
-    echo json_encode(['error' => 'Erro ao inserir no banco de dados: ' . $e->getMessage()]);
+    $heap[] = $value;
 
-    exit;
-}
+    function heapifyUp(&$heap, $index) {
+        $parentIndex = intdiv($index - 1, 2);
+        if ($index > 0 && $heap[$index] < $heap[$parentIndex]) {
+            [$heap[$index], $heap[$parentIndex]] = [$heap[$parentIndex], $heap[$index]];
 
-try {
-    $stmt = $pdo->query("
-        SELECT
-            value
-        FROM
-            heap
-    ");
+            heapifyUp($heap, $parentIndex);
+        }
+    }
 
-    $heap = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    function buildHeap(&$heap) {
+        $n = count($heap);
+        for ($i = intdiv($n, 2) - 1; $i >= 0; $i--) {
+            heapifyDown($heap, $n, $i);
+        }
+    }
 
-    function heapify(&$heap, $n, $i) {
-        $smallest = $i;
-        $left = 2 * $i + 1;
-        $right = 2 * $i + 2;
+    function heapifyDown(&$heap, $n, $index) {
+        $smallest = $index;
+        $left = 2 * $index + 1;
+        $right = 2 * $index + 2;
 
         if ($left < $n && $heap[$left] < $heap[$smallest]) {
             $smallest = $left;
@@ -54,23 +57,18 @@ try {
             $smallest = $right;
         }
 
-        if ($smallest != $i) {
-            [$heap[$i], $heap[$smallest]] = [$heap[$smallest], $heap[$i]];
-            heapify($heap, $n, $smallest);
+        if ($smallest != $index) {
+            [$heap[$index], $heap[$smallest]] = [$heap[$smallest], $heap[$index]];
+            heapifyDown($heap, $n, $smallest);
         }
     }
 
-    function buildHeap(&$heap) {
-        $n = count($heap);
-        for ($i = intdiv($n, 2) - 1; $i >= 0; $i--) {
-            heapify($heap, $n, $i);
-        }
-    }
+    heapifyUp($heap, count($heap) - 1);
 
-    buildHeap($heap);
+    echo json_encode(['heap' => $heap]);
 
-    echo json_encode(['heap' => array_slice($heap, 0, 20)]);
 } catch (PDOException $e) {
-    echo json_encode(['error' => 'Erro ao consultar o banco de dados: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Erro ao inserir no banco de dados: ' . $e->getMessage()]);
+    exit;
 }
 ?>
